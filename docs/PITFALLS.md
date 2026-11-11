@@ -13,16 +13,19 @@ V23 与 V25 的桌面栈、软件源和包依赖都变了，跨版本 `full-upgr
 V25 的包放在 `beige/` 目录下的 `crimson` 分发中：
 
 ```
-deb https://mirrors.aliyun.com/deepin/beige/ crimson main commercial community
+deb https://cdn-community-packages.deepin.com/deepin/beige/ crimson main commercial community
 ```
 
 不是 `/deepin/crimson/`（实测 404），也不是 `/deepin/beige/dists/beige`。
 工具探测的是 `<mirror>/dists/crimson/InRelease`，返回可读才认为镜像可用。
-当前默认镜像：
+当前默认镜像，顺序即尝试顺序：
 
-- `https://mirrors.aliyun.com/deepin/beige/`
+- `https://cdn-community-packages.deepin.com/deepin/beige/`
 - `https://mirrors.tuna.tsinghua.edu.cn/deepin/beige/`
-- `https://cdn-community-packages.deepin.com/beige/`
+- `https://mirrors.aliyun.com/deepin/beige/`
+
+官方 CDN 优先，镜像只作回退。镜像可能滞后：曾出现镜像仍提供旧版
+`dde-control-center`（6.1.103，官方源已是 6.1.113），升级后控制中心异常。
 
 应用商店源使用 `appstore-V25`；驱动源使用 `driver-25` 的 `snipe non-free`。
 两者都可能因网络或签名问题导致 `apt update` 失败，工具会测试后按需停用。
