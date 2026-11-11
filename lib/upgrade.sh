@@ -238,9 +238,21 @@ stop_services_for_upgrade() {
   systemctl stop packagekit 2>/dev/null || true
 }
 
+removed_packages_block() {
+  awk '
+    /^The following packages will be REMOVED:/ { f=1; next }
+    f && /^[^[:space:]]/ { f=0 }
+    f && NF { print }
+  ' "$1"
+}
+
+removed_package_names() {
+  tr -s '[:space:]' '\n' | sed '/^$/d; s/:.*//'
+}
+
 run_simulation() {
   local simdir="$STATE_DIR/upgrade"
-  local removed critical_removed="" p
+  local removed removed_names critical_removed="" p
   mkdir -p "$simdir"
   SIM_LOG="$simdir/apt-simulate.log"
   section "升级模拟（不改动系统）"
@@ -252,16 +264,13 @@ run_simulation() {
   grep -E '^[0-9]+ upgraded' "$SIM_LOG" | tail -1 || true
   grep -E '^Need to get|^After this operation' "$SIM_LOG" | sed 's/^/  /' || true
 
-  removed="$(awk '
-    /^The following packages will be REMOVED:/ { f=1; next }
-    f && /^[^[:space:]]/ { f=0 }
-    f && NF { print }
-  ' "$SIM_LOG")"
+  removed="$(removed_packages_block "$SIM_LOG")"
   if [ -n "$removed" ]; then
     printf '将删除的包（前 40 个）：\n'
     printf '%s\n' "$removed" | head -40 | sed 's/^/  /'
+    removed_names="$(printf '%s\n' "$removed" | removed_package_names)"
     for p in "${DESKTOP_PACKAGES[@]}" dde-session-shell; do
-      if printf '%s\n' "$removed" | awk '{print $1}' | sed 's/:.*//' | grep -qx "$p"; then
+      if printf '%s\n' "$removed_names" | grep -qx "$p"; then
         critical_removed="$critical_removed $p"
       fi
     done

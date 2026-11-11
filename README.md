@@ -44,7 +44,9 @@ sudo deepin-v25 fix-desktop
 ```
 
 升级脚本会要求输入 `UPGRADE` 确认；中途断电、断网或关闭终端后，重新执行
-`sudo deepin-v25 upgrade` 即可从 apt 断点继续。建议先开 `screen -S up25`。
+`sudo deepin-v25 upgrade` 即可从 apt 断点继续。若系统已被识别为 V25，命令会
+提示改用 `sudo deepin-v25 post` 续做剩余的全量升级和桌面修复。建议先开
+`screen -S up25`。
 
 ## 命令
 
@@ -62,7 +64,7 @@ sudo deepin-v25 fix-desktop
 | `diagnose` | 收集桌面故障报告，便于排查 |
 | `install` | 复制工具到 `/opt/deepin-v23-to-v25` 并链接 `deepin-v25` |
 
-全局参数：`--config FILE`、`--yes/-y`、`--dry-run`、`--force`、`--verbose`。
+全局参数：`--config FILE`、`--yes/-y`、`--dry-run`、`--force`。
 `--dry-run` 不会安装包或改动软件源、用户数据，但仍会写日志和升级前状态快照。
 
 ## 备份范围
@@ -133,6 +135,7 @@ sudo deepin-v25 diagnose
 - 明文归档在打包时排除敏感路径；敏感归档未加密时默认拒绝执行。
 - 模拟升级阶段若发现桌面关键包将被移除，或会安装 immutable/磐石相关包，立即中止。
 - 第三方源全部移到隔离目录，升级后由 `sources` 按需恢复；恢复失败会自动重新隔离。
+- 默认优先使用 Deepin 官方软件源，镜像仅作回退，避免镜像未同步导致旧包。
 - 保留旧内核与 GRUB 菜单（默认 5 秒），升级前备份 GRUB 配置。
 - 升级前记录 dpkg 选择、apt-mark、挂载、分区、fstab、crypttab、显卡、Docker
   容器等状态。

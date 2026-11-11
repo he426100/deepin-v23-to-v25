@@ -37,6 +37,8 @@ simulates, downloads, runs full-upgrade, then verifies.
 If power, network or the terminal dies: log in to a TTY again and run
   sudo deepin-v25 upgrade
 It resumes from the apt breakpoint. A backup is NOT repeated.
+If the system is already detected as V25, run "sudo deepin-v25 post" to
+finish the remaining full-upgrade and desktop repair.
 
 
 FIRST BOOT INTO DEEPIN 25

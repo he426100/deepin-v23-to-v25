@@ -241,6 +241,179 @@ else
   printf '[skip] gpg 未安装，跳过加密测试\n'
 fi
 
+echo "== 系统敏感路径 =="
+missing_excludes=""
+for e in etc/shadow etc/gshadow etc/ssh etc/ssl/private etc/pki/private \
+         etc/NetworkManager/system-connections etc/wireguard etc/openvpn \
+         etc/ppp root/.ssh root/.gnupg; do
+  printf '%s\n' "${TAR_EXCLUDES_SYSTEM[@]}" | grep -qx "$e" || missing_excludes="$missing_excludes $e"
+done
+if [ -z "$missing_excludes" ]; then
+  pass "系统明文归档排除全部受保护路径"
+else
+  fail "系统明文归档缺少排除：$missing_excludes"
+fi
+
+fakeroot="$TMPROOT/fakeroot"
+mkdir -p "$fakeroot/etc/ssl/private" "$fakeroot/home/u"
+printf 'shadow\n' >"$fakeroot/etc/shadow"
+printf 'key\n' >"$fakeroot/etc/ssl/private/server.key"
+printf 'keep\n' >"$fakeroot/home/u/keep.txt"
+sysabs="$TMPROOT/sysabs.bin"
+printf '%s\0' "$fakeroot/etc/shadow" "$fakeroot/etc/ssl/private/server.key" \
+  "$fakeroot/home/u/keep.txt" >"$sysabs"
+WORK="$TMPROOT/work"
+write_archive system "" system-test.tar.gz "$fakeroot" "$sysabs" 0
+syslisting="$(restore_stream system-test.tar.gz | gzip -dc | tar -tf -)"
+case "$syslisting" in
+  *keep.txt*) pass "系统明文归档保留普通文件" ;;
+  *) fail "系统明文归档丢失普通文件" ;;
+esac
+case "$syslisting" in
+  *etc/shadow*|*server.key*) fail "系统明文归档泄露受保护路径" ;;
+  *) pass "系统明文归档排除 shadow 和私钥" ;;
+esac
+
+echo "== 系统列表去重 =="
+sysplain_list="$TMPROOT/sysplain.bin"
+printf '%s\0' /etc /etc/shadow >"$sysplain_list"
+list_remove_exact "$sysplain_list" /etc/shadow
+sysplain_count="$(list_count "$sysplain_list")"
+sysplain_flat="$(tr -d '\0' <"$sysplain_list")"
+check "受保护路径精确移出明文列表" \
+  '[ "$sysplain_count" -eq 1 ] && [ "$sysplain_flat" = "/etc" ]'
+
+echo "== 符号链接标准目录 =="
+home3="$TMPROOT/home3"
+mkdir -p "$home3/data/real-docs" "$TMPROOT/work3/lists"
+printf 'doc\n' >"$home3/data/real-docs/a.txt"
+ln -s "$home3/data/real-docs" "$home3/Documents-link"
+WORK="$TMPROOT/work3"
+: >"$WORK/lists/system-plain"
+: >"$WORK/lists/system-secret"
+plain3="$TMPROOT/plain3.bin"
+secret3="$TMPROOT/secret3.bin"
+: >"$plain3"
+: >"$secret3"
+add_user_scanned_path "$home3/Documents-link" tester "$home3" "$plain3" "$secret3" 2>/dev/null
+flat3="$(tr -d '\0' <"$plain3")"
+case "$flat3" in
+  *"$home3/Documents-link"*) pass "符号链接本身进入用户清单" ;;
+  *) fail "符号链接本身未进入用户清单" ;;
+esac
+case "$flat3" in
+  *"$home3/data/real-docs"*) pass "符号链接目标进入用户清单" ;;
+  *) fail "符号链接目标未进入用户清单（数据会丢失）" ;;
+esac
+
+outside="$TMPROOT/outside-docs"
+mkdir -p "$outside"
+ln -s "$outside" "$home3/Outside-link"
+: >"$plain3"
+add_user_scanned_path "$home3/Outside-link" tester "$home3" "$plain3" "$secret3" 2>/dev/null
+sys3="$(tr -d '\0' <"$WORK/lists/system-plain")"
+case "$sys3" in
+  *"$outside"*) pass "HOME 外链接目标归入系统归档" ;;
+  *) fail "HOME 外链接目标未归入系统归档" ;;
+esac
+case "$(tr -d '\0' <"$plain3")" in
+  *"$outside"*) fail "HOME 外链接目标误入用户归档" ;;
+  *) pass "HOME 外链接目标不进入用户归档" ;;
+esac
+
+: >"$plain3"
+: >"$WORK/lists/system-plain"
+add_user_scanned_path "$outside" tester "$home3" "$plain3" "$secret3" 2>/dev/null
+sys3="$(tr -d '\0' <"$WORK/lists/system-plain")"
+case "$sys3" in
+  *"$outside"*) pass "HOME 外标准目录归入系统归档" ;;
+  *) fail "HOME 外标准目录未归入系统归档" ;;
+esac
+case "$(tr -d '\0' <"$plain3")" in
+  *"$outside"*) fail "HOME 外标准目录误入用户归档" ;;
+  *) pass "HOME 外标准目录不进入用户归档" ;;
+esac
+
+echo "== 恢复解包 =="
+restore_home="$TMPROOT/restore-home"
+mkdir -p "$restore_home"
+extract_home_archive data.tar.gz 0 gzip "$(id -un)" "$restore_home" >/dev/null
+check "恢复后普通文件存在" '[ -f "$restore_home/hello.txt" ]'
+check "恢复后私密文件未被明文解出" '[ ! -f "$restore_home/.bashrc" ]'
+
+symabs="$TMPROOT/symabs.bin"
+printf '%s\0' "$home3/Documents-link" "$home3/data/real-docs" >"$symabs"
+write_archive home tester symlink-test.tar.gz "$home3" "$symabs" 0
+symhome="$TMPROOT/restore-symlink"
+mkdir -p "$symhome"
+extract_home_archive symlink-test.tar.gz 0 gzip "$(id -un)" "$symhome" >/dev/null
+check "恢复后符号链接存在" '[ -L "$symhome/Documents-link" ]'
+check "恢复后链接目标数据存在" '[ -f "$symhome/data/real-docs/a.txt" ]'
+
+printf '%s\0' "$outside" >"$TMPROOT/absout.bin"
+if make_relative_list "$home3" "$TMPROOT/absout.bin" "$TMPROOT/relout.bin" 2>/dev/null; then
+  fail "HOME 外路径未被 make_relative_list 拒绝"
+else
+  pass "HOME 外路径被 make_relative_list 拒绝"
+fi
+printf '%s\0' /etc/shadow >"$TMPROOT/absroot.bin"
+make_relative_list / "$TMPROOT/absroot.bin" "$TMPROOT/relroot.bin"
+relroot="$(tr -d '\0' <"$TMPROOT/relroot.bin")"
+check "系统归档成员去掉根前缀" '[ "$relroot" = "etc/shadow" ]'
+
+echo "== REMOVED 折行解析 =="
+simfixture="$TMPROOT/sim-removed.log"
+cat >"$simfixture" <<'EOF'
+The following packages will be REMOVED:
+  libfoo:amd64 dde-session-shell
+  dde-shell
+The following NEW packages will be installed:
+  unrelated-pkg
+EOF
+removed_names_test="$(removed_package_names < <(removed_packages_block "$simfixture"))"
+for pkg in libfoo dde-session-shell dde-shell; do
+  if printf '%s\n' "$removed_names_test" | grep -qx "$pkg"; then
+    pass "折行 REMOVED 识别：$pkg"
+  else
+    fail "折行 REMOVED 漏掉：$pkg"
+  fi
+done
+if printf '%s\n' "$removed_names_test" | grep -qx unrelated-pkg; then
+  fail "REMOVED 段之后的包被误收"
+else
+  pass "REMOVED 段之后的包未被误收"
+fi
+
+echo "== 安装路径校验 =="
+mkdir -p "$TMPROOT/fake-repo/bin"
+if ( validate_tool_install_dir "$TMPROOT" "$TMPROOT/fake-repo" ) >/dev/null 2>&1; then
+  fail "未拒绝仓库的上级目录"
+else
+  pass "拒绝仓库的上级目录"
+fi
+if ( validate_tool_install_dir "$TMPROOT/fake-repo/sub" "$TMPROOT/fake-repo" ) >/dev/null 2>&1; then
+  fail "未拒绝仓库内部目录"
+else
+  pass "拒绝仓库内部目录"
+fi
+badpath="$TMPROOT/bad dir"
+if ( validate_tool_install_dir "$badpath" "$TMPROOT/fake-repo" ) >/dev/null 2>&1; then
+  fail "未拒绝含空格的安装路径"
+else
+  pass "拒绝含空格的安装路径"
+fi
+check "非法路径校验发生在创建目录之前" '[ ! -e "$badpath" ]'
+check "独立安装路径通过校验" \
+  'validate_tool_install_dir "$TMPROOT/install-dest" "$TMPROOT/fake-repo"'
+
+echo "== 默认源与备份阈值 =="
+first_mirror="$(bash -c '. "$1"; printf "%s" "${DEEPIN_MIRRORS[0]}"' bash \
+  "$REPO_ROOT/config/default.conf")"
+check "官方 CDN 优先" \
+  '[ "$first_mirror" = "https://cdn-community-packages.deepin.com/deepin/beige/" ]'
+check "MAX_BACKUP_AGE_DAYS 写入默认配置" \
+  'grep -q "^MAX_BACKUP_AGE_DAYS=14$" "$REPO_ROOT/config/default.conf"'
+
 echo "== apt 源回滚 =="
 apt_update() { return 0; }
 APT_ETC_DIR="$TMPROOT/etc-apt"

@@ -37,6 +37,18 @@ list_add_path() {
   printf '%s\0' "$path" >>"$file"
 }
 
+list_remove_exact() {
+  local file="$1" path="$2" p tmp
+  [ -f "$file" ] || return 0
+  tmp="$file.tmp"
+  : >"$tmp"
+  while IFS= read -r -d '' p; do
+    [ "$p" = "$path" ] && continue
+    printf '%s\0' "$p" >>"$tmp"
+  done <"$file"
+  mv -- "$tmp" "$file"
+}
+
 list_empty() { [ ! -s "$1" ]; }
 
 list_print() {
@@ -224,6 +236,7 @@ find_secret_files() {
 
 TAR_EXCLUDES=()
 TAR_EXCLUDES_SECRET=()
+TAR_EXCLUDES_SYSTEM=()
 build_tar_excludes() {
   local -a common=(
     '.cache' 'Cache' 'CachedData' 'Code Cache' 'GPUCache' 'Service Worker'
@@ -246,6 +259,12 @@ build_tar_excludes() {
     '.env' '.env.*' '*.env' '*.pem' '*.key' '*.p12' '*.pfx' '*.kdbx' '*.ovpn'
     'id_rsa' 'id_rsa.*' 'id_ed25519' 'id_ed25519.*' 'id_ecdsa' 'id_ecdsa.*'
     'id_dsa' 'id_dsa.*' 'ssh_host_*_key'
+  )
+  # Plain system archives run with cwd=/, so these must match full members.
+  TAR_EXCLUDES_SYSTEM=(
+    'etc/shadow' 'etc/gshadow' 'etc/ssh' 'etc/ssl/private' 'etc/pki/private'
+    'etc/NetworkManager/system-connections' 'etc/wireguard' 'etc/openvpn'
+    'etc/ppp' 'root/.ssh' 'root/.gnupg'
   )
   if is_true "$SECRETS_INCLUDE_CONFIG"; then
     TAR_EXCLUDES+=('.config')
@@ -360,7 +379,13 @@ make_relative_list() {
     elif [ "$root" = "/" ]; then
       printf '%s\0' "${p#/}" >>"$rel"
     else
-      printf '%s\0' "${p#"$root"/}" >>"$rel"
+      case "$p" in
+        "$root"/*) printf '%s\0' "${p#"$root"/}" >>"$rel" ;;
+        *)
+          printf 'make_relative_list: %s 不在 %s 下\n' "$p" "$root" >&2
+          return 1
+          ;;
+      esac
     fi
   done <"$abs"
 }
@@ -390,6 +415,8 @@ write_archive() {
   local -a tar_excludes=("${TAR_EXCLUDES[@]}")
   if [ "$encrypt" -eq 1 ]; then
     tar_excludes=("${TAR_EXCLUDES_SECRET[@]}")
+  elif [ "${kind%%-*}" = "system" ]; then
+    tar_excludes+=("${TAR_EXCLUDES_SYSTEM[@]}")
   fi
   for pat in "${tar_excludes[@]}"; do
     tar_cmd+=("--exclude=$pat")
@@ -503,11 +530,50 @@ run_hooks() {
 
 # --------------------------------------------------------------- backup -----
 
+add_classified_path() {
+  local path="$1" home="$2" plain="$3" secret="$4"
+  if is_secret_path "$path" "$home"; then
+    list_add_path "$secret" "$path"
+  else
+    list_add_path "$plain" "$path"
+  fi
+}
+
+add_user_scanned_path() {
+  local path="$1" user="$2" home="$3" plain="$4" secret="$5"
+  local target
+  if [ -L "$path" ]; then
+    if target="$(realpath -e -- "$path" 2>/dev/null)"; then
+      if [ "$target" != "$home" ] && { [ -d "$target" ] || [ -f "$target" ]; }; then
+        if is_subpath_lexical "$target" "$home"; then
+          warn "$user: $path 是符号链接，同时备份链接和目标：$target"
+          add_classified_path "$target" "$home" "$plain" "$secret"
+        else
+          warn "$user: $path 的链接目标在 HOME 之外，归入系统归档（恢复需 --system）：$target"
+          list_add_path "$WORK/lists/system-plain" "$target"
+        fi
+      else
+        warn "$user: $path 链接到不支持的目标，只备份链接本身。"
+      fi
+    else
+      warn "$user: $path 是断链，只备份链接本身。"
+    fi
+    list_add_path "$plain" "$path"
+  elif is_subpath_lexical "$path" "$home"; then
+    add_classified_path "$path" "$home" "$plain" "$secret"
+  else
+    warn "$user: 标准目录在 HOME 之外，归入系统归档（恢复需 --system）：$path"
+    list_add_path "$WORK/lists/system-plain" "$path"
+  fi
+}
+
 prepare_lists() {
   local users_file="$WORK/users.txt"
   local user home uid plain secret path p
   local -a paths=()
   : >"$users_file"
+  : >"$WORK/lists/system-plain"
+  : >"$WORK/lists/system-secret"
 
   resolve_backup_users >"$WORK/user-names.txt"
   chmod 600 "$WORK/user-names.txt"
@@ -526,7 +592,7 @@ prepare_lists() {
     : >"$secret"
 
     while IFS= read -r p; do
-      [ -n "$p" ] && list_add_path "$plain" "$p"
+      [ -n "$p" ] && add_user_scanned_path "$p" "$user" "$home" "$plain" "$secret"
     done < <(user_standard_paths "$home")
 
     while IFS= read -r p; do
@@ -538,17 +604,14 @@ prepare_lists() {
     fi
   done <"$WORK/user-names.txt"
 
-  : >"$WORK/lists/system-plain"
-  : >"$WORK/lists/system-secret"
-
   for p in "${BACKUP_EXTRA_PATHS[@]}"; do
     [ -n "$p" ] || continue
+    local was_link=0
+    [ -L "$p" ] && was_link=1
     path="$(realpath -m -- "$p")"
     [ -e "$path" ] || [ -L "$path" ] || { warn "指定路径不存在，跳过：$p"; continue; }
     [ "$path" = "/" ] && die "拒绝把整个根目录作为额外路径。"
-    if [ -L "$path" ]; then
-      warn "额外路径是符号链接：$path（tar 只保存链接本身，不跟随目标）。"
-    fi
+    [ "$was_link" -eq 1 ] && warn "额外路径是符号链接，按目标备份：$p -> $path"
 
     local matched=0
     while IFS=$'\t' read -r user home uid; do
@@ -592,7 +655,10 @@ prepare_lists() {
       while IFS= read -r -d '' q; do
         is_subpath_lexical "$p" "$q" && { covered=1; break; }
       done <"$WORK/lists/system-plain"
-      [ "$covered" -eq 1 ] && list_add_path "$WORK/lists/system-secret" "$p"
+      if [ "$covered" -eq 1 ]; then
+        list_add_path "$WORK/lists/system-secret" "$p"
+        list_remove_exact "$WORK/lists/system-plain" "$p"
+      fi
     done < <(system_protected_paths)
   fi
 

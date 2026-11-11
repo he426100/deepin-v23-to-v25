@@ -17,7 +17,6 @@ fi
 : "${LOCK_FILE:=/run/lock/deepin-v23-to-v25.lock}"
 : "${ASSUME_YES:=0}"
 : "${DRY_RUN:=0}"
-: "${VERBOSE:=0}"
 : "${FORCE:=0}"
 : "${SKIP_BACKUP_CHECK:=0}"
 : "${ALLOW_GRAPHICAL:=0}"
@@ -319,17 +318,29 @@ run_protected() {
 
 tool_install_dir() { printf '%s' "${TOOL_INSTALL_DIR:-/opt/deepin-v23-to-v25}"; }
 
+validate_tool_install_dir() {
+  local dest="$1" src="$2" dest_real src_real
+  case "$dest" in
+    *[![:print:]]*) die "安装路径必须是可打印 ASCII：$dest" ;;
+  esac
+  case "$dest" in
+    *[!A-Za-z0-9._/-]*) die "安装路径只能使用 ASCII 字母、数字和 ._/-：$dest" ;;
+  esac
+  dest_real="$(realpath -m -- "$dest")"
+  src_real="$(realpath -m -- "$src")"
+  if [ "$dest_real" = "$src_real" ] || \
+     is_subpath_lexical "$src_real" "$dest_real" || \
+     is_subpath_lexical "$dest_real" "$src_real"; then
+    die "安装路径不能与工具仓库重叠：$dest（仓库：$src）"
+  fi
+}
+
 install_tool_copy() {
   local dest src
   dest="$(tool_install_dir)"
   src="$REPO_ROOT"
-  case "$dest" in
-    *[![:print:]]*) die "安装路径必须是可打印 ASCII：$dest" ;;
-  esac
+  validate_tool_install_dir "$dest" "$src"
   mkdir -p -- "$dest" || die "无法创建 $dest"
-  case "$dest" in
-    *[!A-Za-z0-9._/-]*) die "安装路径只能使用 ASCII 字母、数字和 ._/-：$dest" ;;
-  esac
   if have rsync; then
     rsync -a --exclude '.git/' --exclude 'tests/' "$src"/ "$dest"/ || die "复制工具到 $dest 失败"
   else

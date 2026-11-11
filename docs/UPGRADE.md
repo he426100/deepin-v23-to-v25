@@ -34,13 +34,15 @@ sudo deepin-v25 upgrade
 
 1. 把自身复制到 `/opt/deepin-v23-to-v25`，建立 `deepin-v25` 命令。
 2. 启用持久化 journald（1 GiB 上限），保证首次启动失败时有日志。
-3. 备份 GRUB 配置，设置 5 秒菜单和 `menu_show_once`，保留旧内核入口。
+3. 备份 GRUB 配置，设置 5 秒菜单（`GRUB_TIMEOUT_STYLE=menu`），保留旧内核入口。
 4. 停止 Docker 容器与 Docker、lightdm、unattended-upgrades、packagekit。
 5. 把所有 `/etc/apt/sources.list.d/*.list|*.sources` 移到隔离目录，并备份原始
    `sources.list`。
 6. 依次探测 `DEEPIN_MIRRORS`，写入
-   `deb <mirror>/beige/ crimson main commercial community`，每次都用
-   `apt update` 验证；全部失败则中止，原始源仍可恢复。
+   `deb <mirror> crimson main commercial community`（镜像 URL 已包含
+   `/beige/`），每次都用 `apt update` 验证；全部失败则中止，原始源仍可恢复。
+   默认官方 CDN 优先，镜像只作回退：镜像可能滞后，曾出现镜像仍提供旧版
+   `dde-control-center` 导致升级后控制中心异常。
 7. 可选测试 appstore（`appstore-V25`）和 driver（`driver-25`）源，失败自动停用。
 8. `apt-get -s full-upgrade` 模拟：
    - 如果 `dde-shell`、`dde-session`、`dde-session-shell`、`lightdm` 会被删除，中止。
@@ -63,8 +65,9 @@ apt/dpkg 支持断点续跑。断电、断网或终端关闭后：
 sudo deepin-v25 upgrade
 ```
 
-重新执行会重新预检、重新隔离源、重新模拟；已下载的包会复用。若 apt 状态损坏，
-先跑：
+重新执行会重新预检、重新隔离源、重新模拟；已下载的包会复用。如果
+`/etc/os-release` 已经显示 V25，`upgrade` 会提示改用 `post`，由它继续完成
+剩余的全量升级和桌面修复。若 apt 状态损坏，先跑：
 
 ```bash
 sudo deepin-v25 rescue

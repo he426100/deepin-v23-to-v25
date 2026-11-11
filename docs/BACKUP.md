@@ -109,6 +109,7 @@ docker exec mysql-8.0 sh -c \
 - 默认按 3500 MiB 分卷，适配 FAT32 U 盘；恢复工具会自动按顺序拼接。
 - 每个分卷写入 `checksums.sha256`。
 - `BACKUP_VERIFY=1` 时会实际解压并读取 tar 索引，确认归档可恢复。
+- `upgrade` 预检要求最近备份不超过 `MAX_BACKUP_AGE_DAYS` 天（默认 14）。
 
 空间不足时工具会在写入前失败。备份目录内部结构见仓库根 README。
 

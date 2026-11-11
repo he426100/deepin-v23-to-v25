@@ -20,7 +20,6 @@ while [ $# -gt 0 ]; do
     --yes|-y) ASSUME_YES=1; shift ;;
     --dry-run) DRY_RUN=1; shift ;;
     --force) FORCE=1; shift ;;
-    --verbose) VERBOSE=1; shift ;;
     --version) printf '%s %s\n' "$TOOL_NAME" "$TOOL_VERSION"; exit 0 ;;
     --help|-h) SHOW_HELP=1; shift ;;
     --) shift; ARGS+=("$@"); break ;;

@@ -209,20 +209,23 @@ cmd_restore() {
 
   local -a rows=()
   local kind user base acodec enc parts total
-  local need_pass=0
+  local need_pass=0 skipped_system=0
   while IFS=$'\t' read -r kind user base acodec enc parts total; do
     [ -n "$kind" ] || continue
     case "$kind" in
       system|secrets-system)
-        [ "$use_system" -eq 1 ] || continue
+        if [ "$use_system" -eq 0 ]; then
+          skipped_system=$((skipped_system + 1))
+          continue
+        fi
         ;;
     esac
     rows+=("$kind"$'\t'"$user"$'\t'"$base"$'\t'"$acodec"$'\t'"$enc")
     [ "$enc" -eq 1 ] && need_pass=1
   done <"$RESTORE_DIR/archives.tsv"
 
-  if [ "${#rows[@]}" -eq 0 ]; then
-    warn "--system 未指定，只恢复用户数据；系统额外路径已跳过。"
+  if [ "$skipped_system" -gt 0 ]; then
+    warn "--system 未指定，跳过 $skipped_system 个系统归档；系统额外路径未恢复。"
   fi
 
   if is_true "$DRY_RUN"; then
@@ -300,7 +303,7 @@ cmd_restore() {
   printf '用户数据已恢复到各自家目录。\n'
   if [ "$use_system" -eq 1 ]; then
     printf '系统额外路径已恢复；检查 /etc 下被覆盖的配置。\n'
-  else
+  elif [ "$skipped_system" -gt 0 ]; then
     printf '系统额外路径未恢复；需要时加 --system。\n'
   fi
   printf '\n建议：\n'

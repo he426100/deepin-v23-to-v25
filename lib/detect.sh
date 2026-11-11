@@ -413,15 +413,6 @@ EOF
   ok "升级前状态已记录。"
 }
 
-copy_pre_state_to_backup() {
-  local dest="$1"
-  [ -d "$dest" ] || return 0
-  [ -d "$PRE_STATE" ] || return 0
-  mkdir -p "$dest/pre-upgrade-state" 2>/dev/null || return 0
-  cp -a "$PRE_STATE"/. "$dest/pre-upgrade-state"/ 2>/dev/null || \
-    cp -r "$PRE_STATE"/. "$dest/pre-upgrade-state"/ 2>/dev/null || true
-}
-
 enable_persistent_journal() {
   is_true "$ENABLE_PERSISTENT_JOURNAL" || return 0
   section "持久化系统日志"
