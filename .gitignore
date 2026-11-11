@@ -1,0 +1,16 @@
+# Runtime state and logs (never commit)
+*.log
+*.pass
+*.passphrase
+last-backup
+backup-paths.suggested.conf
+
+# Editor / OS noise
+.DS_Store
+*.swp
+*~
+.idea/
+.vscode/
+
+# Local test scratch
+tests/tmp/

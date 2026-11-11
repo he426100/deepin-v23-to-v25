@@ -1,0 +1,67 @@
+#!/usr/bin/env bash
+# Single entry point for the generic Deepin 23 -> 25 upgrade tool.
+set -Eeuo pipefail
+
+BIN_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd -- "$BIN_DIR/.." && pwd)"
+export REPO_ROOT
+
+# shellcheck source=../lib/common.sh
+. "$REPO_ROOT/lib/common.sh"
+
+SHOW_HELP=0
+ARGS=()
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --config)
+      [ $# -ge 2 ] || die "--config 需要参数"
+      CONFIG_FILE="$2"; shift 2 ;;
+    --config=*) CONFIG_FILE="${1#*=}"; shift ;;
+    --yes|-y) ASSUME_YES=1; shift ;;
+    --dry-run) DRY_RUN=1; shift ;;
+    --force) FORCE=1; shift ;;
+    --verbose) VERBOSE=1; shift ;;
+    --version) printf '%s %s\n' "$TOOL_NAME" "$TOOL_VERSION"; exit 0 ;;
+    --help|-h) SHOW_HELP=1; shift ;;
+    --) shift; ARGS+=("$@"); break ;;
+    --*) ARGS+=("$1"); shift ;;
+    *) ARGS+=("$1"); shift ;;
+  esac
+done
+
+if [ "$SHOW_HELP" -eq 1 ] || [ "${#ARGS[@]}" -eq 0 ]; then
+  # shellcheck source=../lib/upgrade.sh
+  . "$REPO_ROOT/lib/upgrade.sh"
+  cmd_help
+  exit 0
+fi
+
+load_config
+
+# shellcheck source=../lib/detect.sh
+. "$REPO_ROOT/lib/detect.sh"
+# shellcheck source=../lib/backup.sh
+. "$REPO_ROOT/lib/backup.sh"
+# shellcheck source=../lib/restore.sh
+. "$REPO_ROOT/lib/restore.sh"
+# shellcheck source=../lib/upgrade.sh
+. "$REPO_ROOT/lib/upgrade.sh"
+
+CMD="${ARGS[0]}"
+set -- "${ARGS[@]:1}"
+
+case "$CMD" in
+  help|usage)      cmd_help ;;
+  preflight)       cmd_preflight "$@" ;;
+  scan)            cmd_scan "$@" ;;
+  backup)          cmd_backup "$@" ;;
+  upgrade)         cmd_upgrade "$@" ;;
+  post|post-upgrade) cmd_post_upgrade "$@" ;;
+  fix-desktop|fix-dock) cmd_fix_desktop "$@" ;;
+  rescue)          cmd_rescue "$@" ;;
+  restore)         cmd_restore "$@" ;;
+  sources)         cmd_sources "$@" ;;
+  diagnose)        cmd_diagnose "$@" ;;
+  install)         cmd_install "$@" ;;
+  *)               warn "未知命令：$CMD"; cmd_help; exit 1 ;;
+esac

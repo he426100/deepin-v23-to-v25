@@ -1,0 +1,36 @@
+# 复制为 /etc/deepin-v23-to-v25.conf，按需修改。
+# 该文件由 Bash source，保持合法 Bash 语法。
+# 不要把加密口令写在这里。
+
+# 备份盘挂载点（必填；不要用根分区）
+BACKUP_DEST="/media/$USER/backup"
+
+# auto = 所有普通登录用户；也可写 "alice bob"
+BACKUP_USERS="auto"
+
+# 已自动覆盖的常见路径之外，需要额外保存的目录/文件。
+# HOME 内的路径跟随该用户恢复；HOME 外的路径需要 restore --system。
+BACKUP_EXTRA_PATHS=(
+  # "/srv/www"
+  # "/home/alice/数据集"
+  # "/opt/myapp/conf"
+)
+
+# 额外排除模式（按路径组件匹配）
+BACKUP_EXTRA_EXCLUDES=(
+  # "*.qcow2"
+  # "*.iso"
+)
+
+# 大目录开关
+BACKUP_INCLUDE_DOWNLOADS=0
+BACKUP_INCLUDE_MEDIA=0
+BACKUP_INCLUDE_DISK_IMAGES=0
+
+# 微信默认不备份
+WECHAT_BACKUP=0
+
+# 私密数据加密。口令文件权限必须是 0600，且不要和备份盘放在一起。
+ENCRYPT_SECRETS=1
+SECRETS_PASSPHRASE_FILE=""
+SECRETS_INCLUDE_CONFIG=1
