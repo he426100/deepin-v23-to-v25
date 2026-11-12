@@ -70,7 +70,8 @@ Ctrl+Alt+F3, log in, then:
 
 rescue repairs dpkg/apt and reinstalls missing desktop packages.
 If root is read-only or immutable packages are present, it refuses:
-disable the immutable/read-only protection, reboot, then retry.
+fix the cause (disable immutable protection on V25, or fix the filesystem
+or ro mount on V23), reboot, then retry.
 
 
 THIRD-PARTY APT SOURCES

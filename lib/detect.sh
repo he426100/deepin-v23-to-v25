@@ -41,7 +41,8 @@ root_is_readonly() {
 }
 
 immutable_packages() {
-  dpkg-query -W -f='${Package}\n' 2>/dev/null | grep -i 'immutable' || true
+  dpkg-query -W -f='${Package}\n' 2>/dev/null | \
+    grep -E '^(deepin-immutable|deepin-recovery|uos-recovery)' || true
 }
 
 check_version() {
@@ -71,19 +72,22 @@ check_arch() {
 }
 
 check_root_fs() {
-  local target src fstype opts
+  local target src fstype opts pkgs
   target="$(findmnt -no TARGET / 2>/dev/null || echo /)"
   src="$(fs_source /)"
   fstype="$(fs_type /)"
   opts="$(findmnt -no OPTIONS / 2>/dev/null || true)"
+  pkgs="$(immutable_packages)"
   preflight_ok "根分区：${src:-unknown}（${fstype:-unknown}）挂载于 $target"
   if root_is_readonly; then
-    preflight_error "根文件系统是只读的（磐石/immutable 已启用）。"
-    printf '  先关闭只读保护并重启：控制中心 -> 系统 -> 开发者选项 -> 关闭只读保护\n'
-    printf '  或：sudo deepin-immutable-writable enable && sudo reboot\n'
+    preflight_error "根文件系统是只读的。"
+    if is_deepin_v25 || [ -n "$pkgs" ]; then
+      printf '  先关闭只读保护并重启：控制中心 -> 系统 -> 开发者选项 -> 关闭只读保护\n'
+      printf '  或：sudo deepin-immutable-writable enable && sudo reboot\n'
+    else
+      printf '  V23 没有磐石；检查文件系统错误或 /etc/fstab 中的 ro 挂载，修复后重试。\n'
+    fi
   fi
-  local pkgs
-  pkgs="$(immutable_packages)"
   if [ -n "$pkgs" ]; then
     preflight_error "检测到 immutable/磐石相关包：$(printf '%s' "$pkgs" | tr '\n' ' ')"
     printf '  本工具不支持磐石系统，请先关闭只读保护。\n'

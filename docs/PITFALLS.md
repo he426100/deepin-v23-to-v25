@@ -32,6 +32,9 @@ deb https://cdn-community-packages.deepin.com/deepin/beige/ crimson main commerc
 
 ## 3. 磐石/只读系统会直接失败
 
+V23 没有磐石；这一节针对在 V25 上执行 `post`/`fix-desktop`/`rescue`，以及 V23 上因
+文件系统错误或手动 `ro` 挂载导致的只读根。
+
 V25 的磐石（immutable）把根文件系统置于只读保护下，`apt` 无法写入。升级脚本在
 预检阶段检查挂载选项和 `deepin-immutable-*` 包，发现后拒绝继续；升级模拟阶段
 如果发现将安装 immutable/uos-recovery 相关包也会中止。这不是可以“绕过”的

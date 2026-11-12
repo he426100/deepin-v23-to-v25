@@ -756,8 +756,14 @@ cmd_rescue() {
   printf '版本：%s\n内核：%s\n' "$(os_pretty)" "$(uname -r)"
   printf '根分区：%s\n' "$(findmnt -no OPTIONS / 2>/dev/null || echo unknown)"
 
-  if root_is_readonly || [ -n "$(immutable_packages)" ]; then
-    warn "根分区只读或启用了磐石，apt 修复不会生效。先关闭只读保护并重启。"
+  local imm
+  imm="$(immutable_packages)"
+  if root_is_readonly || [ -n "$imm" ]; then
+    if is_deepin_v25 || [ -n "$imm" ]; then
+      warn "根分区只读或启用了磐石，apt 修复不会生效。先关闭只读保护并重启。"
+    else
+      warn "根分区只读，apt 修复不会生效。V23 没有磐石；检查文件系统错误或 /etc/fstab 中的 ro 挂载。"
+    fi
     return 1
   fi
 

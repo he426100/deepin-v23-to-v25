@@ -24,6 +24,8 @@ export STATE_DIR LOG_DIR
 . "$REPO_ROOT/lib/restore.sh"
 # shellcheck source=../lib/upgrade.sh
 . "$REPO_ROOT/lib/upgrade.sh"
+# shellcheck source=../lib/detect.sh
+. "$REPO_ROOT/lib/detect.sh"
 
 echo "== 语法 =="
 for f in "$REPO_ROOT/bin/deepin-v25" "$REPO_ROOT"/lib/*.sh \
@@ -413,6 +415,27 @@ check "官方 CDN 优先" \
   '[ "$first_mirror" = "https://cdn-community-packages.deepin.com/deepin/beige/" ]'
 check "MAX_BACKUP_AGE_DAYS 写入默认配置" \
   'grep -q "^MAX_BACKUP_AGE_DAYS=14$" "$REPO_ROOT/config/default.conf"'
+
+echo "== 磐石包识别 =="
+imm_out="$(
+  dpkg-query() {
+    printf '%s\n' node-immutable ceph-immutable-object-cache \
+      golang-github-hashicorp-go-immutable-radix-dev \
+      deepin-immutable-ctl deepin-recovery-plugin uos-recovery
+  }
+  immutable_packages
+)"
+for p in deepin-immutable-ctl deepin-recovery-plugin uos-recovery; do
+  case "$imm_out" in
+    *"$p"*) pass "识别磐石包：$p" ;;
+    *) fail "漏掉磐石包：$p" ;;
+  esac
+done
+case "$imm_out" in
+  *node-immutable*|*ceph-immutable*|*immutable-radix*)
+    fail "普通 immutable 包被误判为磐石" ;;
+  *) pass "普通 immutable 包不误判" ;;
+esac
 
 echo "== apt 源回滚 =="
 apt_update() { return 0; }
